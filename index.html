@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<!-- Meta, title, CSS, favicons, etc. -->
+	<meta charset="utf-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+
+	<title>Dung Love Ly</title>
+	<!-- Font Awesome -->
+	<link href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
+
+
+	<!-- jQuery -->
+	<script src="<?php echo base_url(); ?>assets/vendors/jquery/dist/jquery.min.js"></script>
+	<!-- Bootstrap -->
+	<script src="<?php echo base_url(); ?>assets/vendors/bootstrap/dist/js/bootstrap.min.js"></script>
+
+	<script src="https://www.google.com/recaptcha/api.js" async defer></script>
+  <style>
+    html,
+    body {
+      height: 100%;
+      padding: 0;
+      margin: 0;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .box {
+      width: 100%;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+    }
+
+    canvas {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+    }
+
+    #pinkboard {
+      position: relative;
+      margin: auto;
+      height: 500px;
+      width: 500px;
+      animation: animate 1.3s infinite;
+    }
+
+    #pinkboard:before,
+    #pinkboard:after {
+      content: "";
+      position: absolute;
+      background: #ff5ca4;
+      width: 100px;
+      height: 160px;
+      border-top-left-radius: 50px;
+      border-top-right-radius: 50px;
+    }
+
+    #pinkboard:before {
+      left: 100px;
+      transform: rotate(-45deg);
+      transform-origin: 0 100%;
+      box-shadow: 0 14px 28px rgba(0, 0, 0, 0.25),
+        0 10px 10px rgba(0, 0, 0, 0.22);
+    }
+
+    #pinkboard:after {
+      left: 0;
+      transform: rotate(45deg);
+      transform-origin: 100% 100%;
+    }
+
+    @keyframes animate {
+      0% {
+        transform: scale(1);
+      }
+
+      30% {
+        transform: scale(0.8);
+      }
+
+      60% {
+        transform: scale(1.2);
+      }
+
+      100% {
+        transform: scale(1);
+      }
+    }
+  </style>
+</head>
+
+<body class="page_login nav-md">
+
+<canvas id="canvas" width="100%" height="100%"></canvas>
+ <marquee behavior="" direction="" style="color: white;text-align: center;font-size: 20px; font-weight: 600; line-height: 26px;">Love Ly</marquee>
+<div class="box">
+  <canvas id="pinkboard"></canvas>
+</div>
+<script>
+  /*
+   * Settings
+   */
+  var settings = {
+    particles: {
+      length: 2000, // maximum amount of particles
+      duration: 2, // particle duration in sec
+      velocity: 100, // particle velocity in pixels/sec
+      effect: -1.3, // play with this for a nice effect
+      size: 13, // particle size in pixels
+    },
+  };
+  /*
+   * RequestAnimationFrame polyfill by Erik Möller
+   */
+  (function () {
+    var b = 0;
+    var c = ["ms", "moz", "webkit", "o"];
+    for (var a = 0; a < c.length && !window.requestAnimationFrame; ++a) {
+      window.requestAnimationFrame = window[c[a] + "RequestAnimationFrame"];
+      window.cancelAnimationFrame =
+        window[c[a] + "CancelAnimationFrame"] ||
+        window[c[a] + "CancelRequestAnimationFrame"];
+    }
+    if (!window.requestAnimationFrame) {
+      window.requestAnimationFrame = function (h, e) {
+        var d = new Date().getTime();
+        var f = Math.max(0, 16 - (d - b));
+        var g = window.setTimeout(function () {
+          h(d + f);
+        }, f);
+        b = d + f;
+        return g;
+      };
+    }
+    if (!window.cancelAnimationFrame) {
+      window.cancelAnimationFrame = function (d) {
+        clearTimeout(d);
+      };
+    }
+  })();
+  /*
+   * Point class
+   */
+  var Point = (function () {
+    function Point(x, y) {
+      this.x = typeof x !== "undefined" ? x : 0;
+      this.y = typeof y !== "undefined" ? y : 0;
+    }
+    Point.prototype.clone = function () {
+      return new Point(this.x, this.y);
+    };
+    Point.prototype.length = function (length) {
+      if (typeof length == "undefined")
+        return Math.sqrt(this.x * this.x + this.y * this.y);
+      this.normalize();
+      this.x *= length;
+      this.y *= length;
+      return this;
+    };
+    Point.prototype.normalize = function () {
+      var length = this.length();
+      this.x /= length;
+      this.y /= length;
+      return this;
+    };
+    return Point;
+  })();
+  /*
+   * Particle class
+   */
+  var Particle = (function () {
+    function Particle() {
+      this.position = new Point();
+      this.velocity = new Point();
+      this.acceleration = new Point();
+      this.age = 0;
+    }
+    Particle.prototype.initialize = function (x, y, dx, dy) {
+      this.position.x = x;
+      this.position.y = y;
+      this.velocity.x = dx;
+      this.velocity.y = dy;
+      this.acceleration.x = dx * settings.particles.effect;
+      this.acceleration.y = dy * settings.particles.effect;
+      this.age = 0;
+    };
+    Particle.prototype.update = function (deltaTime) {
+      this.position.x += this.velocity.x * deltaTime;
+      this.position.y += this.velocity.y * deltaTime;
+      this.velocity.x += this.acceleration.x * deltaTime;
+      this.velocity.y += this.acceleration.y * deltaTime;
+      this.age += deltaTime;
+    };
+    Particle.prototype.draw = function (context, image) {
+      function ease(t) {
+        return --t * t * t + 1;
+      }
+      var size = image.width * ease(this.age / settings.particles.duration);
+      context.globalAlpha = 1 - this.age / settings.particles.duration;
+      context.drawImage(
+        image,
+        this.position.x - size / 2,
+        this.position.y - size / 2,
+        size,
+        size
+      );
+    };
+    return Particle;
+  })();
+  /*
+   * ParticlePool class
+   */
+  var ParticlePool = (function () {
+    var particles,
+      firstActive = 0,
+      firstFree = 0,
+      duration = settings.particles.duration;
+
+    function ParticlePool(length) {
+      // create and populate particle pool
+      particles = new Array(length);
+      for (var i = 0; i < particles.length; i++)
+        particles[i] = new Particle();
+    }
+    ParticlePool.prototype.add = function (x, y, dx, dy) {
+      particles[firstFree].initialize(x, y, dx, dy);
+
+      // handle circular queue
+      firstFree++;
+      if (firstFree == particles.length) firstFree = 0;
+      if (firstActive == firstFree) firstActive++;
+      if (firstActive == particles.length) firstActive = 0;
+    };
+    ParticlePool.prototype.update = function (deltaTime) {
+      var i;
+
+      // update active particles
+      if (firstActive < firstFree) {
+        for (i = firstActive; i < firstFree; i++)
+          particles[i].update(deltaTime);
+      }
+      if (firstFree < firstActive) {
+        for (i = firstActive; i < particles.length; i++)
+          particles[i].update(deltaTime);
+        for (i = 0; i < firstFree; i++) particles[i].update(deltaTime);
+      }
+
+      // remove inactive particles
+      while (
+        particles[firstActive].age >= duration &&
+        firstActive != firstFree
+      ) {
+        firstActive++;
+        if (firstActive == particles.length) firstActive = 0;
+      }
+    };
+    ParticlePool.prototype.draw = function (context, image) {
+      // draw active particles
+      if (firstActive < firstFree) {
+        for (i = firstActive; i < firstFree; i++)
+          particles[i].draw(context, image);
+      }
+      if (firstFree < firstActive) {
+        for (i = firstActive; i < particles.length; i++)
+          particles[i].draw(context, image);
+        for (i = 0; i < firstFree; i++) particles[i].draw(context, image);
+      }
+    };
+    return ParticlePool;
+  })();
+  /*
+   * Putting it all together
+   */
+  (function (canvas) {
+    var context = canvas.getContext("2d"),
+      particles = new ParticlePool(settings.particles.length),
+      particleRate =
+        settings.particles.length / settings.particles.duration, // particles/sec
+      time;
+
+    // get point on heart with -PI <= t <= PI
+    function pointOnHeart(t) {
+      return new Point(
+        160 * Math.pow(Math.sin(t), 3),
+        130 * Math.cos(t) -
+          50 * Math.cos(2 * t) -
+          20 * Math.cos(3 * t) -
+          10 * Math.cos(4 * t) +
+          25
+      );
+    }
+
+    // creating the particle image using a dummy canvas
+    var image = (function () {
+      var canvas = document.createElement("canvas"),
+        context = canvas.getContext("2d");
+      canvas.width = settings.particles.size;
+      canvas.height = settings.particles.size;
+      // helper function to create the path
+      function to(t) {
+        var point = pointOnHeart(t);
+        point.x =
+          settings.particles.size / 2 +
+          (point.x * settings.particles.size) / 350;
+        point.y =
+          settings.particles.size / 2 -
+          (point.y * settings.particles.size) / 350;
+        return point;
+      }
+      // create the path
+      context.beginPath();
+      var t = -Math.PI;
+      var point = to(t);
+      context.moveTo(point.x, point.y);
+      while (t < Math.PI) {
+        t += 0.01; // baby steps!
+        point = to(t);
+        context.lineTo(point.x, point.y);
+      }
+      context.closePath();
+      // create the fill
+      context.fillStyle = "#FF5CA4";
+      context.fill();
+      // create the image
+      var image = new Image();
+      image.src = canvas.toDataURL();
+      return image;
+    })();
+
+    // render that thing!
+    function render() {
+      // next animation frame
+      requestAnimationFrame(render);
+
+      // update time
+      var newTime = new Date().getTime() / 1000,
+        deltaTime = newTime - (time || newTime);
+      time = newTime;
+
+      // clear canvas
+      context.clearRect(0, 0, canvas.width, canvas.height);
+
+      // create new particles
+      var amount = particleRate * deltaTime;
+      for (var i = 0; i < amount; i++) {
+        var pos = pointOnHeart(Math.PI - 2 * Math.PI * Math.random());
+        var dir = pos.clone().length(settings.particles.velocity);
+        particles.add(
+          canvas.width / 2 + pos.x,
+          canvas.height / 2 - pos.y,
+          dir.x,
+          -dir.y
+        );
+      }
+
+      // update and draw particles
+      particles.update(deltaTime);
+      particles.draw(context, image);
+    }
+
+    // handle (re-)sizing of the canvas
+    function onResize() {
+      canvas.width = canvas.clientWidth;
+      canvas.height = canvas.clientHeight;
+    }
+    window.onresize = onResize;
+
+    // delay rendering bootstrap
+    setTimeout(function () {
+      onResize();
+      render();
+    }, 10);
+  })(document.getElementById("pinkboard"));
+</script>
+
+</body>
+</html>
+<script type="text/javascript">
+	/*Lấy thời gian tết âm lịch (mily giây)*/
+	var tetAmLich = new Date(2022, 1, 1, 0, 0, 0).getTime();
+
+	function newYear() {
+		/*Lấy thời gian ngày hiện tại (mily giây) */
+		var ngayHienTai = new Date().getTime();
+
+		/*Tính thời gian còn lại (mily giây) */
+		thoigianConLai = tetAmLich - ngayHienTai;
+
+		/*Chuyển đơn vị thời gian tương ứng sang mili giây*/
+		var giay = 1000;
+		var phut = giay * 60;
+		var gio = phut * 60;
+		var ngay = gio * 24;
+
+		/*Tìm ra thời gian theo ngày, giờ, phút giây còn lại thông qua cách chia lấy dư(%) và làm tròn số(Math.floor) trong Javascript*/
+		var d = Math.floor(thoigianConLai / (ngay));
+		var h = Math.floor((thoigianConLai % (ngay)) / (gio));
+		var m = Math.floor((thoigianConLai % (gio)) / (phut));
+		var s = Math.floor((thoigianConLai % (phut)) / (giay));
+
+		/*Hiển thị kết quả ra các thẻ Div với ID tương ứng*/
+		if (thoigianConLai > 0) {
+			document.getElementById("day").innerText = d;
+			document.getElementById("hour").innerText = h;
+			document.getElementById("minute").innerText = m;
+			document.getElementById("second").innerText = s;
+		} else {
+			document.getElementById("headline").innerText = "It's my birthday!";
+			document.getElementById("countdown").style.display = "none";
+			document.getElementById("content").style.display = "block";
+		}
+
+	}
+
+	/*Thiết Lập hàm sẽ tự động chạy lại sau 1s*/
+	setInterval(function () {
+		newYear()
+	}, 1000)
+	// when animating on canvas, it is best to use requestAnimationFrame instead of setTimeout or setInterval
+	// not supported in all browsers though and sometimes needs a prefix, so we need a shim
+	window.requestAnimFrame = (function () {
+		return window.requestAnimationFrame ||
+				window.webkitRequestAnimationFrame ||
+				window.mozRequestAnimationFrame ||
+				function (callback) {
+					window.setTimeout(callback, 1000 / 60);
+				};
+	})();
+
+	// now we will setup our basic variables for the demo
+	var canvas = document.getElementById('canvas'),
+			ctx = canvas.getContext('2d'),
+			// full screen dimensions
+			cw = window.innerWidth,
+			ch = window.innerHeight,
+			// firework collection
+			fireworks = [],
+			// particle collection
+			particles = [],
+			// starting hue
+			hue = 120,
+			// when launching fireworks with a click, too many get launched at once without a limiter, one launch per 5 loop ticks
+			limiterTotal = 20,
+			limiterTick = 0,
+			// this will time the auto launches of fireworks, one launch per 80 loop ticks
+			timerTotal = 500,
+			timerTick = 0,
+			mousedown = false,
+			// mouse x coordinate,
+			mx,
+			// mouse y coordinate
+			my;
+
+
+	// set canvas dimensions
+	canvas.width = cw;
+	canvas.height = ch;
+
+	// now we are going to setup our function placeholders for the entire demo
+
+	// get a random number within a range
+	function random(min, max) {
+		return Math.random() * (max - min) + min;
+	}
+
+	// calculate the distance between two points
+	function calculateDistance(p1x, p1y, p2x, p2y) {
+		var xDistance = p1x - p2x,
+				yDistance = p1y - p2y;
+		return Math.sqrt(Math.pow(xDistance, 2) + Math.pow(yDistance, 2));
+	}
+
+	// create firework
+	function Firework(sx, sy, tx, ty) {
+		// actual coordinates
+		this.x = sx;
+		this.y = sy;
+		// starting coordinates
+		this.sx = sx;
+		this.sy = sy;
+		// target coordinates
+		this.tx = tx;
+		this.ty = ty;
+		// distance from starting point to target
+		this.distanceToTarget = calculateDistance(sx, sy, tx, ty);
+		this.distanceTraveled = 0;
+		// track the past coordinates of each firework to create a trail effect, increase the coordinate count to create more prominent trails
+		this.coordinates = [];
+		this.coordinateCount = 3;
+		// populate initial coordinate collection with the current coordinates
+		while (this.coordinateCount--) {
+			this.coordinates.push([this.x, this.y]);
+		}
+		this.angle = Math.atan2(ty - sy, tx - sx);
+		this.speed = 2;
+		this.acceleration = 1.05;
+		this.brightness = random(50, 70);
+		// circle target indicator radius
+		this.targetRadius = 1;
+	}
+
+	// update firework
+	Firework.prototype.update = function (index) {
+		// remove last item in coordinates array
+		this.coordinates.pop();
+		// add current coordinates to the start of the array
+		this.coordinates.unshift([this.x, this.y]);
+
+		// cycle the circle target indicator radius
+		if (this.targetRadius < 8) {
+			this.targetRadius += 0.3;
+		} else {
+			this.targetRadius = 1;
+		}
+
+		// speed up the firework
+		this.speed *= this.acceleration;
+
+		// get the current velocities based on angle and speed
+		var vx = Math.cos(this.angle) * this.speed,
+				vy = Math.sin(this.angle) * this.speed;
+		// how far will the firework have traveled with velocities applied?
+		this.distanceTraveled = calculateDistance(this.sx, this.sy, this.x + vx, this.y + vy);
+
+		// if the distance traveled, including velocities, is greater than the initial distance to the target, then the target has been reached
+		if (this.distanceTraveled >= this.distanceToTarget) {
+			createParticles(this.tx, this.ty);
+			// remove the firework, use the index passed into the update function to determine which to remove
+			fireworks.splice(index, 1);
+		} else {
+			// target not reached, keep traveling
+			this.x += vx;
+			this.y += vy;
+		}
+	}
+
+	// draw firework
+	Firework.prototype.draw = function () {
+		ctx.beginPath();
+		// move to the last tracked coordinate in the set, then draw a line to the current x and y
+		ctx.moveTo(this.coordinates[this.coordinates.length - 1][0], this.coordinates[this.coordinates.length - 1][1]);
+		ctx.lineTo(this.x, this.y);
+		ctx.strokeStyle = 'hsl(' + hue + ', 100%, ' + this.brightness + '%)';
+		ctx.stroke();
+
+		ctx.beginPath();
+		// draw the target for this firework with a pulsing circle
+		//ctx.arc( this.tx, this.ty, this.targetRadius, 0, Math.PI * 2 );
+		ctx.stroke();
+	}
+
+	// create particle
+	function Particle(x, y) {
+		this.x = x;
+		this.y = y;
+		// track the past coordinates of each particle to create a trail effect, increase the coordinate count to create more prominent trails
+		this.coordinates = [];
+		this.coordinateCount = 5;
+
+		while (this.coordinateCount--) {
+			this.coordinates.push([this.x, this.y]);
+		}
+		// set a random angle in all possible directions, in radians
+		this.angle = random(0, Math.PI * 2);
+		this.speed = random(1, 10);
+		// friction will slow the particle down
+		this.friction = 0.95;
+		// gravity will be applied and pull the particle down
+		this.gravity = 0.6;
+		// set the hue to a random number +-20 of the overall hue variable
+		this.hue = random(hue - 20, hue + 20);
+		this.brightness = random(50, 80);
+		this.alpha = 1;
+		// set how fast the particle fades out
+		this.decay = random(0.0075, 0.009);
+	}
+
+	// update particle
+	Particle.prototype.update = function (index) {
+		// remove last item in coordinates array
+		this.coordinates.pop();
+		// add current coordinates to the start of the array
+		this.coordinates.unshift([this.x, this.y]);
+		// slow down the particle
+		this.speed *= this.friction;
+		// apply velocity
+		this.x += Math.cos(this.angle) * this.speed;
+		this.y += Math.sin(this.angle) * this.speed + this.gravity;
+		// fade out the particle
+		this.alpha -= this.decay;
+
+		// remove the particle once the alpha is low enough, based on the passed in index
+		if (this.alpha <= this.decay) {
+			particles.splice(index, 1);
+		}
+	}
+
+	// draw particle
+	Particle.prototype.draw = function () {
+		ctx.beginPath();
+		// move to the last tracked coordinates in the set, then draw a line to the current x and y
+		ctx.moveTo(this.coordinates[this.coordinates.length - 1][0], this.coordinates[this.coordinates.length - 1][1]);
+		ctx.lineTo(this.x, this.y);
+		ctx.strokeStyle = 'hsla(' + this.hue + ', 100%, ' + this.brightness + '%, ' + this.alpha + ')';
+
+		ctx.stroke();
+	}
+
+	// create particle group/explosion
+	function createParticles(x, y) {
+		// increase the particle count for a bigger explosion, beware of the canvas performance hit with the increased particles though
+		var particleCount = 20;
+		while (particleCount--) {
+			particles.push(new Particle(x, y));
+		}
+	}
+
+
+	// main demo loop
+	function loop() {
+		// this function will run endlessly with requestAnimationFrame
+		requestAnimFrame(loop);
+
+		// increase the hue to get different colored fireworks over time
+		hue += 0.5;
+
+		// normally, clearRect() would be used to clear the canvas
+		// we want to create a trailing effect though
+		// setting the composite operation to destination-out will allow us to clear the canvas at a specific opacity, rather than wiping it entirely
+		ctx.globalCompositeOperation = 'destination-out';
+		// decrease the alpha property to create more prominent trails
+		ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+		ctx.fillRect(0, 0, cw, ch);
+		// change the composite operation back to our main mode
+		// lighter creates bright highlight points as the fireworks and particles overlap each other
+		ctx.globalCompositeOperation = 'lighter';
+
+		// loop over each firework, draw it, update it
+		var i = fireworks.length;
+		while (i--) {
+			fireworks[i].draw();
+			fireworks[i].update(i);
+		}
+
+		// loop over each particle, draw it, update it
+		var i = particles.length;
+		while (i--) {
+			particles[i].draw();
+			particles[i].update(i);
+
+		}
+
+
+		// launch fireworks automatically to random coordinates, when the mouse isn't down
+		if (timerTick >= timerTotal) {
+			timerTick = 0;
+		} else {
+			var temp = timerTick % 400;
+			if (temp <= 15) {
+				fireworks.push(new Firework(100, ch, random(190, 200), random(90, 100)));
+				fireworks.push(new Firework(cw - 100, ch, random(cw - 200, cw - 190), random(90, 100)));
+			}
+
+			var temp3 = temp / 10;
+
+			if (temp > 319) {
+				fireworks.push(new Firework(300 + (temp3 - 31) * 100, ch, 300 + (temp3 - 31) * 100, 200));
+			}
+
+			timerTick++;
+		}
+
+		// limit the rate at which fireworks get launched when mouse is down
+		if (limiterTick >= limiterTotal) {
+			if (mousedown) {
+				// start the firework at the bottom middle of the screen, then set the current mouse coordinates as the target
+				fireworks.push(new Firework(cw / 2, ch, mx, my));
+				limiterTick = 0;
+			}
+		} else {
+			limiterTick++;
+		}
+	}
+
+	// mouse event bindings
+	// update the mouse coordinates on mousemove
+	canvas.addEventListener('mousemove', function (e) {
+		mx = e.pageX - canvas.offsetLeft;
+		my = e.pageY - canvas.offsetTop;
+	});
+
+	// toggle mousedown state and prevent canvas from being selected
+	canvas.addEventListener('mousedown', function (e) {
+		e.preventDefault();
+		mousedown = true;
+	});
+
+	canvas.addEventListener('mouseup', function (e) {
+		e.preventDefault();
+		mousedown = false;
+	});
+
+	// once the window loads, we are ready for some fireworks!
+	window.onload = loop;
+</script>
